@@ -6,6 +6,9 @@
     "@testing-library/jest-dom": "^5.14.1",
     "@testing-library/react": "^13.0.0",
     "@testing-library/user-event": "^13.2.1",
+    "axios": "^1.7.9",
+    "electron-is-dev": "^3.0.1",
+    "openai": "^4.77.4",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-scripts": "5.0.1",
@@ -15,7 +18,9 @@
     "start": "react-scripts start",
     "build": "react-scripts build",
     "test": "react-scripts test",
-    "eject": "react-scripts eject"
+    "eject": "react-scripts eject",
+    "electron": "electron .",
+    "electron:build": "yarn build && electron-builder -c.extraMetadata.main=main.js"
   },
   "eslintConfig": {
     "extends": [
@@ -34,5 +39,41 @@
       "last 1 firefox version",
       "last 1 safari version"
     ]
+  },
+  "devDependencies": {
+    "autoprefixer": "^10.4.20",
+    "concurrently": "^9.1.2",
+    "electron": "^33.3.1",
+    "electron-builder": "^25.1.8",
+    "postcss": "^8.4.49",
+    "tailwindcss": "^3.4.17",
+    "wait-on": "^8.0.1"
+  },
+  "description": "MLLM Prototype",
+  "author": "HyunbinJang",
+  "main": "main.js",
+  "build": {
+    "appId": "com.example.your-app",
+    "productName": "MLLM Prototype",
+    "extends": null,
+    "files": [
+      "build/**/*",
+      "main.js"
+    ],
+    "directories": {
+      "buildResources": "assets",
+      "output": "release"
+    },
+    "win": {
+      "target": ["portable"],
+      "sign": false,
+      "signAndEditExecutable": false,
+      "publisherName": "Your Name"
+    },
+    "portable": {
+      "artifactName": "${productName}-portable.exe"
+    },
+    "asar": false,
+    "forceCodeSigning": false
   }
 }
