@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import OpenAI from 'openai';
 import Anthropic from '@anthropic-ai/sdk';
 import { GoogleGenerativeAI } from '@google/generative-ai';
@@ -26,6 +26,46 @@ function App() {
   });
   const [pages, setPages] = useState([{ id: 1, name: 'Chat 1', messages: [] }]);
   const [currentPage, setCurrentPage] = useState(1);
+
+  // LLM 활성화 상태 관리
+  const [activeLLMs, setActiveLLMs] = useState({
+    gpt: true,
+    claude: true,
+    gemini: true
+  });
+
+  // 각 LLM의 사용 가능한 모델 목록
+  const models = {
+    gpt: [
+      { id: 'gpt-4', name: 'GPT-4' },
+      { id: 'gpt-4-turbo-preview', name: 'GPT-4 Turbo' },
+      { id: 'gpt-3.5-turbo', name: 'GPT-3.5 Turbo' }
+    ],
+    claude: [
+      { id: 'claude-3-opus-20240229', name: 'Claude 3 Opus' },
+      { id: 'claude-3-sonnet-20240229', name: 'Claude 3 Sonnet' },
+      { id: 'claude-2.1', name: 'Claude 2.1' }
+    ],
+    gemini: [
+      { id: 'gemini-pro', name: 'Gemini Pro' },
+      { id: 'gemini-pro-vision', name: 'Gemini Pro Vision' }
+    ]
+  };
+
+  // 선택된 모델 상태
+  const [selectedModels, setSelectedModels] = useState({
+    gpt: 'gpt-3.5-turbo',
+    claude: 'claude-3-opus-20240229',
+    gemini: 'gemini-pro'
+  });
+
+  // 모델 선택 핸들러
+  const handleModelChange = (llm, modelId) => {
+    setSelectedModels(prev => ({
+      ...prev,
+      [llm]: modelId
+    }));
+  };
 
   // LoadingIndicator 컴포넌트 추가
   const LoadingIndicator = () => (
@@ -68,6 +108,39 @@ function App() {
     setPages(updatedPages);
   };
 
+  // ModelSelector 컴포넌트
+  const ModelSelector = ({ llm, models, selected, onChange }) => (
+    <select
+      value={selected}
+      onChange={(e) => onChange(llm, e.target.value)}
+      className="text-sm border rounded-md px-2 py-1 bg-white"
+    >
+      {models.map(model => (
+        <option key={model.id} value={model.id}>
+          {model.name}
+        </option>
+      ))}
+    </select>
+  );
+
+  // 토글 스위치 컴포넌트
+  const ToggleSwitch = ({ llm, isActive, onToggle }) => (
+    <div className="flex items-center gap-2">
+      <button
+        onClick={() => onToggle(llm)}
+        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-300
+          ${isActive ? 'bg-blue-500' : 'bg-gray-300'}`}
+      >
+        <span
+          className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform duration-300
+            ${isActive ? 'translate-x-6' : 'translate-x-1'}`}
+        />
+      </button>
+      <span className="text-sm font-medium">{llm.toUpperCase()}</span>
+    </div>
+  );
+
+  // API 호출 시 활성화된 LLM만 처리
   async function handleSubmit(e) {
     e.preventDefault();
     if (!input.trim()) return;
@@ -78,51 +151,61 @@ function App() {
     setInput('');
 
     setIsLoading({
-      gpt: true,
-      claude: true,
-      gemini: true
+      gpt: activeLLMs.gpt,
+      claude: activeLLMs.claude,
+      gemini: activeLLMs.gemini
     });
 
     try {
-      // 각 API 호출을 개별적으로 처리
-      const responses = await Promise.allSettled([
-        openai.chat.completions.create({
-          model: "gpt-3.5-turbo",
-          messages: [...messages, userMessage]
-        }),
-        anthropic.messages.create({
-          model: "claude-3-opus-20240229",
-          max_tokens: 1024,
-          messages: [{ role: "user", content: input }]
-        }),
-        geminiModel.generateContent(input)
-      ]);
+      const apiCalls = [];
+      
+      if (activeLLMs.gpt) {
+        apiCalls.push(
+          openai.chat.completions.create({
+            model: selectedModels.gpt,
+            messages: [...messages, userMessage]
+          })
+        );
+      }
+      
+      if (activeLLMs.claude) {
+        apiCalls.push(
+          anthropic.messages.create({
+            model: selectedModels.claude,
+            max_tokens: 1024,
+            messages: [{ role: "user", content: input }]
+          })
+        );
+      }
+      
+      if (activeLLMs.gemini) {
+        apiCalls.push(geminiModel.generateContent(input));
+      }
 
-      console.log('API Responses:', responses); // 디버깅용
-
+      const responses = await Promise.allSettled(apiCalls);
       let updatedMessages = [...newMessages];
+      let responseIndex = 0;
 
-      // GPT 응답 처리
-      if (responses[0].status === 'fulfilled') {
+      if (activeLLMs.gpt && responses[responseIndex]?.status === 'fulfilled') {
         updatedMessages.push({
           role: 'assistant',
-          content: responses[0].value.choices[0].message.content,
+          content: responses[responseIndex].value.choices[0].message.content,
           model: 'gpt'
         });
+        responseIndex++;
       }
 
-      // Claude 응답 처리
-      if (responses[1].status === 'fulfilled') {
+      if (activeLLMs.claude && responses[responseIndex]?.status === 'fulfilled') {
         updatedMessages.push({
           role: 'assistant',
-          content: responses[1].value.content[0].text,
+          content: responses[responseIndex].value.content[0].text,
           model: 'claude'
         });
+        responseIndex++;
       }
 
-      // Gemini 응답 처리
-      if (responses[2].status === 'fulfilled') {
-        const geminiResult = await responses[2].value.response.text();
+      if (activeLLMs.gemini && responses[responseIndex]?.status === 'fulfilled') {
+        const geminiResult = await responses[responseIndex].value.response.text();
         updatedMessages.push({
           role: 'assistant',
           content: geminiResult,
@@ -133,11 +216,7 @@ function App() {
       updateMessages(updatedMessages);
 
     } catch (error) {
-      console.error('Error details:', {
-        message: error.message,
-        name: error.name,
-        stack: error.stack
-      });
+      console.error('Error details:', error);
     } finally {
       setIsLoading({
         gpt: false,
@@ -160,7 +239,9 @@ function App() {
             +
           </button>
         </div>
-        <div className="flex-1 overflow-y-auto">
+        
+        {/* 채팅 목록 */}
+        <div className="flex-1 overflow-y-auto mb-4">
           {pages.map(page => (
             <div
               key={page.id}
@@ -175,54 +256,129 @@ function App() {
             </div>
           ))}
         </div>
+
+        {/* 구분선 */}
+        <div className="border-t border-gray-300 my-4"></div>
+
+        {/* LLM 토글 */}
+        <div className="space-y-3">
+          <ToggleSwitch
+            llm="gpt"
+            isActive={activeLLMs.gpt}
+            onToggle={(llm) => setActiveLLMs(prev => ({ ...prev, [llm]: !prev[llm] }))}
+          />
+          <ToggleSwitch
+            llm="claude"
+            isActive={activeLLMs.claude}
+            onToggle={(llm) => setActiveLLMs(prev => ({ ...prev, [llm]: !prev[llm] }))}
+          />
+          <ToggleSwitch
+            llm="gemini"
+            isActive={activeLLMs.gemini}
+            onToggle={(llm) => setActiveLLMs(prev => ({ ...prev, [llm]: !prev[llm] }))}
+          />
+        </div>
       </div>
 
       {/* 메인 컨텐츠 */}
       <div className="flex-1 flex flex-col">
-        {/* 응답 영역 */}
         <div className="flex-1 flex min-h-0">
           {/* GPT 응답 */}
-          <div className="flex-1 border-r border-gray-300 p-4 overflow-y-auto">
-            <div className="text-lg font-bold mb-4 sticky top-0 bg-white">GPT Response</div>
-            <div className="space-y-4">
-              {messages.map((message, index) => (
-                message.model === 'gpt' && (
-                  <div key={index} className="bg-gray-200 text-gray-800 rounded-lg p-3">
-                    {message.content}
-                  </div>
-                )
-              ))}
-              {isLoading.gpt && <LoadingIndicator />}
+          <div 
+            className={`transition-all duration-300 ease-in-out flex flex-col ${
+              activeLLMs.gpt 
+                ? 'flex-1 opacity-100 visible' 
+                : 'w-0 opacity-0 invisible'
+            } border-r border-gray-300 overflow-hidden`}
+          >
+            <div className="h-full overflow-y-auto">
+              <div className="sticky top-0 bg-white z-10 p-4 border-b">
+                <div className="text-lg font-bold flex justify-between items-center">
+                  <span className="whitespace-nowrap">GPT</span>
+                  <ModelSelector
+                    llm="gpt"
+                    models={models.gpt}
+                    selected={selectedModels.gpt}
+                    onChange={handleModelChange}
+                  />
+                </div>
+              </div>
+              <div className="p-4 space-y-4">
+                {messages.map((message, index) => (
+                  message.model === 'gpt' && (
+                    <div key={index} className="bg-gray-200 text-gray-800 rounded-lg p-3">
+                      {message.content}
+                    </div>
+                  )
+                ))}
+                {isLoading.gpt && <LoadingIndicator />}
+              </div>
             </div>
           </div>
 
           {/* Claude 응답 */}
-          <div className="flex-1 border-r border-gray-300 p-4 overflow-y-auto">
-            <div className="text-lg font-bold mb-4 sticky top-0 bg-white">Claude Response</div>
-            <div className="space-y-4">
-              {messages.map((message, index) => (
-                message.model === 'claude' && (
-                  <div key={index} className="bg-purple-100 rounded-lg p-3">
-                    {message.content}
-                  </div>
-                )
-              ))}
-              {isLoading.claude && <LoadingIndicator />}
+          <div 
+            className={`transition-all duration-300 ease-in-out flex flex-col ${
+              activeLLMs.claude 
+                ? 'flex-1 opacity-100 visible' 
+                : 'w-0 opacity-0 invisible'
+            } border-r border-gray-300 overflow-hidden`}
+          >
+            <div className="h-full overflow-y-auto">
+              <div className="sticky top-0 bg-white z-10 p-4 border-b">
+                <div className="text-lg font-bold flex justify-between items-center">
+                  <span className="whitespace-nowrap">Claude</span>
+                  <ModelSelector
+                    llm="claude"
+                    models={models.claude}
+                    selected={selectedModels.claude}
+                    onChange={handleModelChange}
+                  />
+                </div>
+              </div>
+              <div className="p-4 space-y-4">
+                {messages.map((message, index) => (
+                  message.model === 'claude' && (
+                    <div key={index} className="bg-purple-100 rounded-lg p-3">
+                      {message.content}
+                    </div>
+                  )
+                ))}
+                {isLoading.claude && <LoadingIndicator />}
+              </div>
             </div>
           </div>
 
           {/* Gemini 응답 */}
-          <div className="flex-1 border-r border-gray-300 p-4 overflow-y-auto">
-            <div className="text-lg font-bold mb-4 sticky top-0 bg-white">Gemini Response</div>
-            <div className="space-y-4">
-              {messages.map((message, index) => (
-                message.model === 'gemini' && (
-                  <div key={index} className="bg-green-100 rounded-lg p-3">
-                    {message.content}
-                  </div>
-                )
-              ))}
-              {isLoading.gemini && <LoadingIndicator />}
+          <div 
+            className={`transition-all duration-300 ease-in-out flex flex-col ${
+              activeLLMs.gemini 
+                ? 'flex-1 opacity-100 visible' 
+                : 'w-0 opacity-0 invisible'
+            } border-r border-gray-300 overflow-hidden`}
+          >
+            <div className="h-full overflow-y-auto">
+              <div className="sticky top-0 bg-white z-10 p-4 border-b">
+                <div className="text-lg font-bold flex justify-between items-center">
+                  <span className="whitespace-nowrap">Gemini</span>
+                  <ModelSelector
+                    llm="gemini"
+                    models={models.gemini}
+                    selected={selectedModels.gemini}
+                    onChange={handleModelChange}
+                  />
+                </div>
+              </div>
+              <div className="p-4 space-y-4">
+                {messages.map((message, index) => (
+                  message.model === 'gemini' && (
+                    <div key={index} className="bg-green-100 rounded-lg p-3">
+                      {message.content}
+                    </div>
+                  )
+                ))}
+                {isLoading.gemini && <LoadingIndicator />}
+              </div>
             </div>
           </div>
 
