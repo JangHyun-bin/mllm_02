@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import OpenAI from 'openai';
 import Anthropic from '@anthropic-ai/sdk';
 import { GoogleGenerativeAI } from '@google/generative-ai';
@@ -446,15 +446,72 @@ function App() {
     };
   }, []);
 
-  // GPT API 호출 함수 추가
-  const handleGPTResponse = async (input, groupId) => {
+  // Claude API 호출 부분 수정
+  const handleClaudeResponse = async (input, groupId) => {
     try {
+      // 현재 대화 그룹의 이전 메시지들 수집
       const conversationHistory = messages
         .filter(msg => msg.groupId === groupId)
         .map(msg => ({
           role: msg.role === 'user' ? 'user' : 'assistant',
           content: msg.content
         }));
+
+      // Claude API 요청
+      const response = await anthropic.messages.create({
+        model: 'claude-3-opus-20240229',
+        max_tokens: 1024,
+        system: "You are a helpful AI assistant. Maintain context of the conversation and provide relevant responses.",
+        messages: [
+          ...conversationHistory,
+          { role: 'user', content: input }
+        ]
+      });
+
+      return response.content[0].text;
+    } catch (error) {
+      console.error('Claude Error:', error);
+      return 'Error occurred while processing your request.';
+    }
+  };
+
+  // Gemini API 호출 부분 수정
+  const handleGeminiResponse = async (input, groupId) => {
+    try {
+      // 현재 대화 그룹의 이전 메시지들을 Gemini 형식으로 변환
+      const history = messages
+        .filter(msg => msg.groupId === groupId)
+        .map(msg => ({
+          role: msg.role === 'user' ? 'user' : 'model',
+          parts: [{ text: msg.content }]
+        }));
+
+      // Gemini 채팅 세션 시작
+      const chat = geminiModel.startChat({
+        history: history,
+        generationConfig: {
+          maxOutputTokens: 1000,
+        },
+      });
+
+      // 현재 메시지 전송
+      const result = await chat.sendMessage(input);
+      const response = await result.response;
+      return response.text();
+    } catch (error) {
+      console.error('Gemini Error:', error);
+      return 'Error occurred while processing your request.';
+    }
+  };
+
+  // GPT 응답 처리 함수 추가
+  const handleGPTResponse = async (input) => {
+    try {
+      const currentPageData = pages.find(p => p.id === currentPage);
+      const conversationHistory = (currentPageData?.messages || []).map(msg => ({
+        role: msg.role === 'user' ? 'user' : 'assistant',
+        content: msg.content
+      }));
 
       const response = await fetch('https://api.openai.com/v1/chat/completions', {
         method: 'POST',
@@ -481,58 +538,58 @@ function App() {
     }
   };
 
-  // Claude API 호출 함수 (기존 코드)
-  const handleClaudeResponse = async (input, groupId) => {
-    try {
-      const conversationHistory = messages
-        .filter(msg => msg.groupId === groupId)
-        .map(msg => ({
-          role: msg.role === 'user' ? 'user' : 'assistant',
-          content: msg.content
-        }));
+  // 상태 추가
+  const [allClearedPages, setAllClearedPages] = useState(null);
+  const [clearRestoreCountdown, setClearRestoreCountdown] = useState(0);
 
-      const response = await anthropic.messages.create({
-        model: 'claude-3-opus-20240229',
-        max_tokens: 1024,
-        system: "You are a helpful AI assistant. Maintain context of the conversation and provide relevant responses.",
-        messages: [
-          ...conversationHistory,
-          { role: 'user', content: input }
-        ]
+  // Clear All 함수
+  const clearAllChats = useCallback(() => {
+    // 현재 모든 페이지 백업
+    setAllClearedPages({
+      pages: [...pages],
+      timestamp: Date.now()
+    });
+    
+    // 페이지 초기화
+    setPages([{ id: 0, name: 'New Chat', messages: [] }]);
+    setCurrentPage(0);
+    setMessages([]);
+    
+    // localStorage 초기화
+    localStorage.setItem('chatPages', JSON.stringify([{ id: 0, name: 'New Chat', messages: [] }]));
+    
+    // 복원 카운트다운 시작
+    setClearRestoreCountdown(15);
+    
+    const timer = setInterval(() => {
+      setClearRestoreCountdown(prev => {
+        if (prev <= 1) {
+          clearInterval(timer);
+          setAllClearedPages(null);
+          return 0;
+        }
+        return prev - 1;
       });
+    }, 1000);
+  }, [pages]);
 
-      return response.content[0].text;
-    } catch (error) {
-      console.error('Claude Error:', error);
-      return 'Error occurred while processing your request.';
-    }
-  };
+  // Restore All 함수
+  const restoreAllChats = useCallback((e) => {
+    e.stopPropagation();
+    if (!allClearedPages) return;
 
-  // Gemini API 호출 함수 (기존 코드)
-  const handleGeminiResponse = async (input, groupId) => {
-    try {
-      const history = messages
-        .filter(msg => msg.groupId === groupId)
-        .map(msg => ({
-          role: msg.role === 'user' ? 'user' : 'model',
-          parts: [{ text: msg.content }]
-        }));
-
-      const chat = geminiModel.startChat({
-        history: history,
-        generationConfig: {
-          maxOutputTokens: 1000,
-        },
-      });
-
-      const result = await chat.sendMessage(input);
-      const response = await result.response;
-      return response.text();
-    } catch (error) {
-      console.error('Gemini Error:', error);
-      return 'Error occurred while processing your request.';
-    }
-  };
+    // 백업된 페이지들 복원
+    setPages(allClearedPages.pages);
+    setCurrentPage(allClearedPages.pages[0]?.id || 0);
+    setMessages(allClearedPages.pages[0]?.messages || []);
+    
+    // localStorage 복원
+    localStorage.setItem('chatPages', JSON.stringify(allClearedPages.pages));
+    
+    // 상태 초기화
+    setAllClearedPages(null);
+    setClearRestoreCountdown(0);
+  }, [allClearedPages]);
 
   return (
     <>
@@ -540,11 +597,10 @@ function App() {
       <div className="h-screen flex">
         {/* 사이드바 */}
         <div className="w-64 bg-gray-100 border-r border-gray-300 p-4 flex flex-col">
-          <div className="flex justify-between items-center mb-4">
-            <h2 className="text-lg font-bold">Chats</h2>
+          <div className="flex justify-end mb-4">
             <button
               onClick={addNewPage}
-              className="bg-blue-500 text-white px-3 py-1 rounded-lg hover:bg-blue-600"
+              className="p-2 hover:bg-gray-200 rounded-lg transition-colors"
             >
               +
             </button>
@@ -556,7 +612,6 @@ function App() {
               const isDeleted = deletedPages[page.id];
               
               if (isDeleted) {
-                // Restore 버튼 표시
                 return (
                   <div
                     key={`restore-${page.id}`}
@@ -568,7 +623,6 @@ function App() {
                     >
                       Restore {page.name}
                     </button>
-                    {/* 진행 막대 */}
                     <div className="ml-3 flex-1 bg-gray-300 rounded-full h-1.5">
                       <div
                         className="bg-blue-500 h-1.5 rounded-full"
@@ -582,7 +636,6 @@ function App() {
                 );
               }
 
-              // 일반 채팅 항목 표시
               return (
                 <div
                   key={page.id}
@@ -609,16 +662,36 @@ function App() {
             })}
           </div>
 
-          {/* 새 채팅 버튼 */}
-          <button
-            onClick={addNewPage}
-            className="mb-4 bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600 transition-colors"
-          >
-            New Chat
-          </button>
-
           {/* 구분선 */}
           <div className="border-t border-gray-300 my-4"></div>
+
+          {/* Clear All & Restore 섹션 */}
+          {allClearedPages ? (
+            <div className="mb-4 p-3 rounded-lg bg-gray-200 flex items-center">
+              <button
+                onClick={restoreAllChats}
+                className="text-blue-500 hover:text-blue-700 whitespace-nowrap"
+              >
+                Restore All Chats
+              </button>
+              <div className="ml-3 flex-1 bg-gray-300 rounded-full h-1.5">
+                <div
+                  className="bg-blue-500 h-1.5 rounded-full"
+                  style={{
+                    width: `${(clearRestoreCountdown / 15) * 100}%`,
+                    transition: 'width 1s linear'
+                  }}
+                />
+              </div>
+            </div>
+          ) : (
+            <button
+              onClick={clearAllChats}
+              className="mb-4 bg-red-500 text-white px-4 py-2 rounded-lg hover:bg-red-600 transition-colors flex items-center justify-center gap-2"
+            >
+              <span>Clear All Chats</span>
+            </button>
+          )}
 
           {/* Export 버튼 */}
           <button
