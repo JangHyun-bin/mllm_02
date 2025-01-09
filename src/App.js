@@ -192,105 +192,72 @@ function App() {
   const [hoveredGroupId, setHoveredGroupId] = useState(null);
 
   // API 호출 시 활성화된 LLM만 처리
-  async function handleSubmit(e) {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     if (!input.trim()) return;
 
-    // 현재 그룹 ID 계산 (사용자 메시지 개수 기준)
-    const currentGroupId = messages.filter(m => m.role === 'user').length;
+    const groupId = messages.length > 0 ? messages[messages.length - 1].groupId + 1 : 0;
 
+    // 사용자 메시지 추가
     const userMessage = {
       role: 'user',
       content: input,
-      groupId: currentGroupId
+      groupId: groupId
     };
-
-    const newMessages = [...messages, userMessage];
-    updateMessages(newMessages);
+    
+    const updatedMessages = [...messages, userMessage];
+    setMessages(updatedMessages);
     setInput('');
 
-    setIsLoading({
-      gpt: activeLLMs.gpt,
-      claude: activeLLMs.claude,
-      gemini: activeLLMs.gemini
-    });
-
-    try {
-      const apiCalls = [];
-
-      if (activeLLMs.gpt) {
-        apiCalls.push(
-          openai.chat.completions.create({
-            model: selectedModels.gpt,
-            messages: newMessages.filter(m => m.role === 'user' || (m.model === 'gpt'))
-              .map(m => ({
-                role: m.role,
-                content: m.content
-              }))
-          })
-        );
-      }
-
-      if (activeLLMs.claude) {
-        apiCalls.push(
-          anthropic.messages.create({
-            model: selectedModels.claude,
-            max_tokens: 1024,
-            messages: [{ role: "user", content: input }]
-          })
-        );
-      }
-
-      if (activeLLMs.gemini) {
-        apiCalls.push(geminiModel.generateContent(input));
-      }
-
-      const responses = await Promise.allSettled(apiCalls);
-      let updatedMessages = [...newMessages];
-      let responseIndex = 0;
-
-      if (activeLLMs.gpt && responses[responseIndex]?.status === 'fulfilled') {
-        updatedMessages.push({
+    // 활성화된 각 AI 모델에 대해 응답 처리
+    if (activeLLMs.gpt) {
+      const gptResponse = await handleGPTResponse(input, groupId);
+      if (gptResponse) {
+        setMessages(prev => [...prev, {
           role: 'assistant',
-          content: responses[responseIndex].value.choices[0].message.content,
+          content: gptResponse,
           model: 'gpt',
-          groupId: currentGroupId
-        });
-        responseIndex++;
+          groupId: groupId
+        }]);
       }
-
-      if (activeLLMs.claude && responses[responseIndex]?.status === 'fulfilled') {
-        updatedMessages.push({
-          role: 'assistant',
-          content: responses[responseIndex].value.content[0].text,
-          model: 'claude',
-          groupId: currentGroupId
-        });
-        responseIndex++;
-      }
-
-      if (activeLLMs.gemini && responses[responseIndex]?.status === 'fulfilled') {
-        const geminiResult = await responses[responseIndex].value.response.text();
-        updatedMessages.push({
-          role: 'assistant',
-          content: geminiResult,
-          model: 'gemini',
-          groupId: currentGroupId
-        });
-      }
-
-      updateMessages(updatedMessages);
-
-    } catch (error) {
-      console.error('Error:', error);
-    } finally {
-      setIsLoading({
-        gpt: false,
-        claude: false,
-        gemini: false
-      });
     }
-  }
+
+    if (activeLLMs.claude) {
+      const claudeResponse = await handleClaudeResponse(input, groupId);
+      if (claudeResponse) {
+        setMessages(prev => [...prev, {
+          role: 'assistant',
+          content: claudeResponse,
+          model: 'claude',
+          groupId: groupId
+        }]);
+      }
+    }
+
+    if (activeLLMs.gemini) {
+      const geminiResponse = await handleGeminiResponse(input, groupId);
+      if (geminiResponse) {
+        setMessages(prev => [...prev, {
+          role: 'assistant',
+          content: geminiResponse,
+          model: 'gemini',
+          groupId: groupId
+        }]);
+      }
+    }
+
+    // localStorage 업데이트
+    const currentPageData = pages.find(p => p.id === currentPage);
+    if (currentPageData) {
+      const updatedPages = pages.map(page =>
+        page.id === currentPage
+          ? { ...page, messages: messages }
+          : page
+      );
+      setPages(updatedPages);
+      localStorage.setItem('chatPages', JSON.stringify(updatedPages));
+    }
+  };
 
   // AI 응답 메시지 컴포넌트
   const ResponseMessage = ({ message }) => (
@@ -478,6 +445,94 @@ function App() {
       });
     };
   }, []);
+
+  // GPT API 호출 함수 추가
+  const handleGPTResponse = async (input, groupId) => {
+    try {
+      const conversationHistory = messages
+        .filter(msg => msg.groupId === groupId)
+        .map(msg => ({
+          role: msg.role === 'user' ? 'user' : 'assistant',
+          content: msg.content
+        }));
+
+      const response = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${process.env.REACT_APP_OPENAI_API_KEY}`
+        },
+        body: JSON.stringify({
+          model: 'gpt-4-turbo-preview',
+          messages: [
+            { role: 'system', content: 'You are a helpful AI assistant.' },
+            ...conversationHistory,
+            { role: 'user', content: input }
+          ],
+          max_tokens: 1000
+        })
+      });
+
+      const data = await response.json();
+      return data.choices[0].message.content;
+    } catch (error) {
+      console.error('GPT Error:', error);
+      return 'Error occurred while processing your request.';
+    }
+  };
+
+  // Claude API 호출 함수 (기존 코드)
+  const handleClaudeResponse = async (input, groupId) => {
+    try {
+      const conversationHistory = messages
+        .filter(msg => msg.groupId === groupId)
+        .map(msg => ({
+          role: msg.role === 'user' ? 'user' : 'assistant',
+          content: msg.content
+        }));
+
+      const response = await anthropic.messages.create({
+        model: 'claude-3-opus-20240229',
+        max_tokens: 1024,
+        system: "You are a helpful AI assistant. Maintain context of the conversation and provide relevant responses.",
+        messages: [
+          ...conversationHistory,
+          { role: 'user', content: input }
+        ]
+      });
+
+      return response.content[0].text;
+    } catch (error) {
+      console.error('Claude Error:', error);
+      return 'Error occurred while processing your request.';
+    }
+  };
+
+  // Gemini API 호출 함수 (기존 코드)
+  const handleGeminiResponse = async (input, groupId) => {
+    try {
+      const history = messages
+        .filter(msg => msg.groupId === groupId)
+        .map(msg => ({
+          role: msg.role === 'user' ? 'user' : 'model',
+          parts: [{ text: msg.content }]
+        }));
+
+      const chat = geminiModel.startChat({
+        history: history,
+        generationConfig: {
+          maxOutputTokens: 1000,
+        },
+      });
+
+      const result = await chat.sendMessage(input);
+      const response = await result.response;
+      return response.text();
+    } catch (error) {
+      console.error('Gemini Error:', error);
+      return 'Error occurred while processing your request.';
+    }
+  };
 
   return (
     <>
