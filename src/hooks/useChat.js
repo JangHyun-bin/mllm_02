@@ -196,6 +196,14 @@ export const useChat = () => {
         }));
     }, []);
 
+    const renamePage = useCallback((pageId, newName) => {
+        setPages(prev => prev.map(page => 
+            page.id === pageId
+                ? { ...page, name: newName }
+                : page
+        ));
+    }, []);
+
     useEffect(() => {
         saveToStorage('chatPages', pages);
     }, [pages]);
@@ -247,6 +255,7 @@ export const useChat = () => {
         handleModelChange,
         hoveredGroupId,
         setHoveredGroupId,
-        restoreCountdowns
+        restoreCountdowns,
+        renamePage
     };
 }; 

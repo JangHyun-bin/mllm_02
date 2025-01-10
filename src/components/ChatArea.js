@@ -13,13 +13,26 @@ export const ChatArea = ({
     setInput,
     handleSubmit
 }) => {
+    // 활성화된 모델 수 계산
+    const activeModelCount = Object.values(activeLLMs).filter(Boolean).length;
+    
+    // 각 모델 영역의 너비 계산 (flex 기반)
+    const getColumnClass = () => {
+        switch(activeModelCount) {
+            case 1: return 'flex-1';
+            case 2: return 'flex-[0.5]';
+            case 3: return 'flex-[0.33]';
+            default: return 'flex-1';
+        }
+    };
+
     return (
         <div className="flex-1 flex flex-col bg-[#0a0a0a]">
-            {/* 모델 선택기 헤더 */}
-            <div className="sticky top-0 bg-[#1a1a1a] z-10 p-4 border-b border-gray-800">
-                <div className="text-lg font-bold flex justify-between items-center text-gray-300">
-                    <div className="grid grid-cols-3 w-full gap-4">
-                        {activeLLMs.gpt && (
+            {/* 모델 선택기 헤더 - flex 레이아웃으로 변경 */}
+            <div className="sticky top-0 bg-[#1a1a1a] z-10 border-b border-gray-800">
+                <div className="flex">
+                    {activeLLMs.gpt && (
+                        <div className={`${getColumnClass()} border-r border-gray-800 p-4`}>
                             <div className="text-center">
                                 <ModelSelector
                                     llm="gpt"
@@ -28,8 +41,10 @@ export const ChatArea = ({
                                     onChange={handleModelChange}
                                 />
                             </div>
-                        )}
-                        {activeLLMs.claude && (
+                        </div>
+                    )}
+                    {activeLLMs.claude && (
+                        <div className={`${getColumnClass()} border-r border-gray-800 p-4`}>
                             <div className="text-center">
                                 <ModelSelector
                                     llm="claude"
@@ -38,8 +53,10 @@ export const ChatArea = ({
                                     onChange={handleModelChange}
                                 />
                             </div>
-                        )}
-                        {activeLLMs.gemini && (
+                        </div>
+                    )}
+                    {activeLLMs.gemini && (
+                        <div className={`${getColumnClass()} p-4`}>
                             <div className="text-center">
                                 <ModelSelector
                                     llm="gemini"
@@ -48,96 +65,102 @@ export const ChatArea = ({
                                     onChange={handleModelChange}
                                 />
                             </div>
-                        )}
-                    </div>
+                        </div>
+                    )}
                 </div>
             </div>
 
-            {/* 메시지 영역 - 패딩 및 스크롤바 스타일 수정 */}
+            {/* 메시지 영역 - 동적 레이아웃 */}
             <div className="flex-1 flex">
                 {/* GPT 영역 */}
-                <div className="flex-1 border-r border-gray-800 overflow-hidden">
-                    <div className="h-full px-8 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-800 scrollbar-track-transparent">
-                        <div className="space-y-4 py-4">
-                            {messages.map((message, index) => (
-                                message.model === 'gpt' && (
-                                    <div key={`gpt-${index}`}>
-                                        {message.role === 'user' ? (
-                                            <UserMessage
-                                                message={message}
-                                                hoveredGroupId={hoveredGroupId}
-                                                setHoveredGroupId={setHoveredGroupId}
-                                            />
-                                        ) : (
-                                            <ResponseMessage
-                                                message={message}
-                                                hoveredGroupId={hoveredGroupId}
-                                                setHoveredGroupId={setHoveredGroupId}
-                                            />
-                                        )}
-                                    </div>
-                                )
-                            ))}
-                            {isLoading.gpt && <LoadingIndicator />}
+                {activeLLMs.gpt && (
+                    <div className={`${getColumnClass()} border-r border-gray-800 overflow-hidden`}>
+                        <div className="h-full px-8 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-800 scrollbar-track-transparent">
+                            <div className="space-y-4 py-4">
+                                {messages.map((message, index) => (
+                                    message.model === 'gpt' && (
+                                        <div key={`gpt-${index}`}>
+                                            {message.role === 'user' ? (
+                                                <UserMessage
+                                                    message={message}
+                                                    hoveredGroupId={hoveredGroupId}
+                                                    setHoveredGroupId={setHoveredGroupId}
+                                                />
+                                            ) : (
+                                                <ResponseMessage
+                                                    message={message}
+                                                    hoveredGroupId={hoveredGroupId}
+                                                    setHoveredGroupId={setHoveredGroupId}
+                                                />
+                                            )}
+                                        </div>
+                                    )
+                                ))}
+                                {isLoading.gpt && <LoadingIndicator />}
+                            </div>
                         </div>
                     </div>
-                </div>
+                )}
 
                 {/* Claude 영역 */}
-                <div className="flex-1 border-r border-gray-800 overflow-hidden">
-                    <div className="h-full px-8 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-800 scrollbar-track-transparent">
-                        <div className="space-y-4 py-4">
-                            {messages.map((message, index) => (
-                                message.model === 'claude' && (
-                                    <div key={`claude-${index}`}>
-                                        {message.role === 'user' ? (
-                                            <UserMessage
-                                                message={message}
-                                                hoveredGroupId={hoveredGroupId}
-                                                setHoveredGroupId={setHoveredGroupId}
-                                            />
-                                        ) : (
-                                            <ResponseMessage
-                                                message={message}
-                                                hoveredGroupId={hoveredGroupId}
-                                                setHoveredGroupId={setHoveredGroupId}
-                                            />
-                                        )}
-                                    </div>
-                                )
-                            ))}
-                            {isLoading.claude && <LoadingIndicator />}
+                {activeLLMs.claude && (
+                    <div className={`${getColumnClass()} border-r border-gray-800 overflow-hidden`}>
+                        <div className="h-full px-8 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-800 scrollbar-track-transparent">
+                            <div className="space-y-4 py-4">
+                                {messages.map((message, index) => (
+                                    message.model === 'claude' && (
+                                        <div key={`claude-${index}`}>
+                                            {message.role === 'user' ? (
+                                                <UserMessage
+                                                    message={message}
+                                                    hoveredGroupId={hoveredGroupId}
+                                                    setHoveredGroupId={setHoveredGroupId}
+                                                />
+                                            ) : (
+                                                <ResponseMessage
+                                                    message={message}
+                                                    hoveredGroupId={hoveredGroupId}
+                                                    setHoveredGroupId={setHoveredGroupId}
+                                                />
+                                            )}
+                                        </div>
+                                    )
+                                ))}
+                                {isLoading.claude && <LoadingIndicator />}
+                            </div>
                         </div>
                     </div>
-                </div>
+                )}
 
                 {/* Gemini 영역 */}
-                <div className="flex-1 overflow-hidden">
-                    <div className="h-full px-8 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-800 scrollbar-track-transparent">
-                        <div className="space-y-4 py-4">
-                            {messages.map((message, index) => (
-                                message.model === 'gemini' && (
-                                    <div key={`gemini-${index}`}>
-                                        {message.role === 'user' ? (
-                                            <UserMessage
-                                                message={message}
-                                                hoveredGroupId={hoveredGroupId}
-                                                setHoveredGroupId={setHoveredGroupId}
-                                            />
-                                        ) : (
-                                            <ResponseMessage
-                                                message={message}
-                                                hoveredGroupId={hoveredGroupId}
-                                                setHoveredGroupId={setHoveredGroupId}
-                                            />
-                                        )}
-                                    </div>
-                                )
-                            ))}
-                            {isLoading.gemini && <LoadingIndicator />}
+                {activeLLMs.gemini && (
+                    <div className={`${getColumnClass()} overflow-hidden`}>
+                        <div className="h-full px-8 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-800 scrollbar-track-transparent">
+                            <div className="space-y-4 py-4">
+                                {messages.map((message, index) => (
+                                    message.model === 'gemini' && (
+                                        <div key={`gemini-${index}`}>
+                                            {message.role === 'user' ? (
+                                                <UserMessage
+                                                    message={message}
+                                                    hoveredGroupId={hoveredGroupId}
+                                                    setHoveredGroupId={setHoveredGroupId}
+                                                />
+                                            ) : (
+                                                <ResponseMessage
+                                                    message={message}
+                                                    hoveredGroupId={hoveredGroupId}
+                                                    setHoveredGroupId={setHoveredGroupId}
+                                                />
+                                            )}
+                                        </div>
+                                    )
+                                ))}
+                                {isLoading.gemini && <LoadingIndicator />}
+                            </div>
                         </div>
                     </div>
-                </div>
+                )}
             </div>
 
             {/* 입력 폼 */}

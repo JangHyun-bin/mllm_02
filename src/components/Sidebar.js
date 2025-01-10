@@ -1,6 +1,7 @@
 import { ToggleSwitch } from './ToggleSwitch';
 import { exportMessages } from '../utils/storage';
 import { RestorePageButton } from './RestorePageButton';
+import { PageOptionsMenu } from './PageOptionsMenu';
 
 export const Sidebar = ({
     pages,
@@ -17,10 +18,27 @@ export const Sidebar = ({
     setActiveLLMs,
     allClearedPages,
     clearRestoreCountdown,
-    messages
+    messages,
+    renamePage
 }) => {
+    // 모든 페이지(활성 + 삭제됨)를 순서대로 정렬
+    const allPages = [
+        ...pages.map(page => ({
+            ...page,
+            isDeleted: false
+        })),
+        ...Object.entries(deletedPages)
+            .filter(([pageId]) => restoreCountdowns[pageId] > 0)
+            .map(([pageId, page]) => ({
+                ...page,
+                isDeleted: true,
+                countdown: restoreCountdowns[pageId]
+            }))
+    ].sort((a, b) => a.id - b.id);  // ID 기준으로 정렬
+
     return (
         <div className="w-64 bg-[#1a1a1a] border-r border-gray-800 p-4 flex flex-col">
+            {/* LLM 토글 스위치들 */}
             <div className="flex flex-col gap-4 mb-4">
                 {/* LLM 토글 스위치들 */}
                 <ToggleSwitch
@@ -40,38 +58,31 @@ export const Sidebar = ({
                 />
             </div>
 
-            {/* 채팅 페이지 목록 */}
+            {/* 통합된 페이지 목록 */}
             <div className="flex-1 overflow-y-auto">
-                {pages.map(page => (
-                    <div
-                        key={page.id}
-                        onClick={() => changePage(page.id)}
-                        className={`flex items-center justify-between p-3 mb-2 rounded-lg cursor-pointer ${
-                            currentPage === page.id ? 'bg-[#2a2a2a]' : 'hover:bg-[#1a1a1a]'
-                        }`}
-                    >
-                        <span className="truncate">{page.name}</span>
-                        <button
-                            onClick={(e) => {
-                                e.stopPropagation();
-                                deletePage(page.id);
-                            }}
-                            className="ml-2 px-2 py-1 text-gray-400 hover:text-gray-200 hover:bg-[#3a3a3a] rounded transition-colors"
-                        >
-                            ×
-                        </button>
-                    </div>
-                ))}
-                
-                {/* 삭제된 페이지의 복원 UI */}
-                {Object.entries(deletedPages).map(([pageId, page]) => (
-                    restoreCountdowns[pageId] > 0 && (
+                {allPages.map(page => (
+                    page.isDeleted ? (
                         <RestorePageButton
-                            key={pageId}
+                            key={page.id}
                             pageName={page.name}
-                            countdown={restoreCountdowns[pageId]}
-                            onRestore={() => restorePage(parseInt(pageId))}
+                            countdown={page.countdown}
+                            onRestore={() => restorePage(page.id)}
                         />
+                    ) : (
+                        <div
+                            key={page.id}
+                            onClick={() => changePage(page.id)}
+                            className={`flex items-center justify-between p-3 mb-2 rounded-lg cursor-pointer ${
+                                currentPage === page.id ? 'bg-[#2a2a2a]' : 'hover:bg-[#1a1a1a]'
+                            }`}
+                        >
+                            <span className="truncate">{page.name}</span>
+                            <PageOptionsMenu
+                                page={page}
+                                onDelete={deletePage}
+                                onRename={renamePage}
+                            />
+                        </div>
                     )
                 ))}
             </div>
