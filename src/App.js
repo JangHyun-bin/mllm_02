@@ -35,6 +35,11 @@ const styles = `
   .message-animate.hovered {
     animation: scaleUp 0.5s ease-in-out forwards;
   }
+
+  body {
+    background-color: #0a0a0a;
+    color: #d0d0d0;
+  }
 `;
 
 function App() {
@@ -102,9 +107,9 @@ function App() {
   // LoadingIndicator 컴포넌트 추가
   const LoadingIndicator = () => (
     <div className="flex space-x-1 items-center h-6">
-      <div className="w-2 h-2 bg-gray-500 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
-      <div className="w-2 h-2 bg-gray-500 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
-      <div className="w-2 h-2 bg-gray-500 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
+      <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
+      <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
+      <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
     </div>
   );
 
@@ -161,7 +166,7 @@ function App() {
     <select
       value={selected}
       onChange={(e) => onChange(llm, e.target.value)}
-      className="text-sm border rounded-md px-2 py-1 bg-white"
+      className="text-sm border rounded-md px-2 py-1 bg-[#1a1a1a] text-gray-300 border-gray-800"
     >
       {models.map(model => (
         <option key={model.id} value={model.id}>
@@ -177,14 +182,14 @@ function App() {
       <button
         onClick={() => onToggle(llm)}
         className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-300
-          ${isActive ? 'bg-blue-500' : 'bg-gray-300'}`}
+          ${isActive ? 'bg-[#2a2a2a]' : 'bg-[#1a1a1a]'}`}
       >
         <span
-          className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform duration-300
+          className={`inline-block h-4 w-4 transform rounded-full bg-gray-300 transition-transform duration-300
             ${isActive ? 'translate-x-6' : 'translate-x-1'}`}
         />
       </button>
-      <span className="text-sm font-medium">{llm.toUpperCase()}</span>
+      <span className="text-sm font-medium text-gray-300">{llm.toUpperCase()}</span>
     </div>
   );
 
@@ -266,10 +271,10 @@ function App() {
       onMouseLeave={() => setHoveredGroupId(null)}
       className={`rounded-lg p-3 transition-transform duration-1500 ease-in-out transform
         ${message.model === 'gpt'
-          ? 'bg-gray-200 text-gray-800'
+          ? 'bg-[#1a1a1a] text-gray-300'
           : message.model === 'claude'
-          ? 'bg-purple-100'
-          : 'bg-green-100'
+          ? 'bg-[#2a1a2a] text-gray-300'
+          : 'bg-[#1a2a1a] text-gray-300'
         }
         ${hoveredGroupId === message.groupId ? 'scale-105' : 'scale-100'}
       `}
@@ -283,7 +288,7 @@ function App() {
     <div
       onMouseEnter={() => setHoveredGroupId(message.groupId)}
       onMouseLeave={() => setHoveredGroupId(null)}
-      className={`bg-blue-500 text-white rounded-lg p-3 transition-transform duration-1500 ease-in-out transform
+      className={`bg-[#2a2a2a] text-gray-300 rounded-lg p-3 transition-transform duration-1500 ease-in-out transform
         ${hoveredGroupId === message.groupId ? 'scale-105' : 'scale-100'}
       `}
     >
@@ -594,9 +599,9 @@ function App() {
   return (
     <>
       <style>{styles}</style>
-      <div className="h-screen flex">
+      <div className="h-screen flex bg-[#0a0a0a]">
         {/* 사이드바 */}
-        <div className="w-64 bg-gray-100 border-r border-gray-300 p-4 flex flex-col">
+        <div className="w-64 bg-[#1a1a1a] border-r border-gray-800 p-4 flex flex-col">
           <div className="flex justify-end mb-4">
             <button
               onClick={addNewPage}
@@ -642,8 +647,8 @@ function App() {
                   onClick={() => changePage(page.id)}
                   className={`p-3 mb-2 rounded-lg cursor-pointer flex justify-between items-center ${
                     currentPage === page.id
-                      ? 'bg-blue-500 text-white'
-                      : 'hover:bg-gray-200'
+                      ? 'bg-[#2a2a2a] text-gray-300'
+                      : 'hover:bg-[#1a1a1a] text-gray-400'
                   }`}
                 >
                   <span>{page.name}</span>
@@ -687,7 +692,7 @@ function App() {
           ) : (
             <button
               onClick={clearAllChats}
-              className="mb-4 bg-red-500 text-white px-4 py-2 rounded-lg hover:bg-red-600 transition-colors flex items-center justify-center gap-2"
+              className="mb-4 bg-[#2a1a1a] text-gray-300 px-4 py-2 rounded-lg hover:bg-[#3a2a2a] transition-colors flex items-center justify-center gap-2"
             >
               <span>Clear All Chats</span>
             </button>
@@ -696,7 +701,7 @@ function App() {
           {/* Export 버튼 */}
           <button
             onClick={exportCurrentPageMessages}
-            className="mb-4 bg-green-500 text-white px-4 py-2 rounded-lg hover:bg-green-600 transition-colors flex items-center justify-center gap-2"
+            className="mb-4 bg-[#1a2a1a] text-gray-300 px-4 py-2 rounded-lg hover:bg-[#2a3a2a] transition-colors flex items-center justify-center gap-2"
           >
             <span>Export Messages</span>
           </button>
@@ -722,19 +727,17 @@ function App() {
         </div>
 
         {/* 메인 컨텐츠 */}
-        <div className="flex-1 flex flex-col">
+        <div className="flex-1 flex flex-col bg-[#0a0a0a]">
           <div className="flex-1 flex min-h-0">
             {/* GPT 응답 */}
-            <div
-              className={`transition-all duration-300 ease-in-out flex flex-col ${
-                activeLLMs.gpt
-                  ? 'flex-1 opacity-100 visible'
-                  : 'w-0 opacity-0 invisible'
-              } border-r border-gray-300 overflow-hidden`}
-            >
+            <div className={`transition-all duration-300 ease-in-out flex flex-col ${
+              activeLLMs.gpt
+                ? 'flex-1 opacity-100 visible'
+                : 'w-0 opacity-0 invisible'
+            } border-r border-gray-700 overflow-hidden`}>
               <div className="h-full overflow-y-auto">
-                <div className="sticky top-0 bg-white z-10 p-4 border-b">
-                  <div className="text-lg font-bold flex justify-between items-center">
+                <div className="sticky top-0 bg-[#1a1a1a] z-10 p-4 border-b border-gray-800">
+                  <div className="text-lg font-bold flex justify-between items-center text-gray-300">
                     <span className="whitespace-nowrap">GPT</span>
                     <ModelSelector
                       llm="gpt"
@@ -759,16 +762,14 @@ function App() {
             </div>
 
             {/* Claude 응답 */}
-            <div
-              className={`transition-all duration-300 ease-in-out flex flex-col ${
-                activeLLMs.claude
-                  ? 'flex-1 opacity-100 visible'
-                  : 'w-0 opacity-0 invisible'
-              } border-r border-gray-300 overflow-hidden`}
-            >
+            <div className={`transition-all duration-300 ease-in-out flex flex-col ${
+              activeLLMs.claude
+                ? 'flex-1 opacity-100 visible'
+                : 'w-0 opacity-0 invisible'
+            } border-r border-gray-700 overflow-hidden`}>
               <div className="h-full overflow-y-auto">
-                <div className="sticky top-0 bg-white z-10 p-4 border-b">
-                  <div className="text-lg font-bold flex justify-between items-center">
+                <div className="sticky top-0 bg-[#1a1a1a] z-10 p-4 border-b border-gray-800">
+                  <div className="text-lg font-bold flex justify-between items-center text-gray-300">
                     <span className="whitespace-nowrap">Claude</span>
                     <ModelSelector
                       llm="claude"
@@ -793,16 +794,14 @@ function App() {
             </div>
 
             {/* Gemini 응답 */}
-            <div
-              className={`transition-all duration-300 ease-in-out flex flex-col ${
-                activeLLMs.gemini
-                  ? 'flex-1 opacity-100 visible'
-                  : 'w-0 opacity-0 invisible'
-              } border-r border-gray-300 overflow-hidden`}
-            >
+            <div className={`transition-all duration-300 ease-in-out flex flex-col ${
+              activeLLMs.gemini
+                ? 'flex-1 opacity-100 visible'
+                : 'w-0 opacity-0 invisible'
+            } border-r border-gray-700 overflow-hidden`}>
               <div className="h-full overflow-y-auto">
-                <div className="sticky top-0 bg-white z-10 p-4 border-b">
-                  <div className="text-lg font-bold flex justify-between items-center">
+                <div className="sticky top-0 bg-[#1a1a1a] z-10 p-4 border-b border-gray-800">
+                  <div className="text-lg font-bold flex justify-between items-center text-gray-300">
                     <span className="whitespace-nowrap">Gemini</span>
                     <ModelSelector
                       llm="gemini"
@@ -828,7 +827,9 @@ function App() {
 
             {/* 사용자 메시지 */}
             <div className="flex-1 p-4 overflow-y-auto">
-              <div className="text-lg font-bold mb-4 sticky top-0 bg-white">User Messages</div>
+              <div className="text-lg font-bold mb-4 sticky top-0 bg-[#1a1a1a] text-gray-300 p-4 border-b border-gray-800">
+                User Messages
+              </div>
               <div className="space-y-4">
                 {messages
                   .filter(message => message.role === 'user')
@@ -843,18 +844,18 @@ function App() {
           </div>
 
           {/* 입력 폼 */}
-          <div className="border-t border-gray-300 p-4">
+          <div className="border-t border-gray-700 p-4">
             <form onSubmit={handleSubmit} className="flex gap-2">
               <input
                 type="text"
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
-                className="flex-1 p-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="flex-1 p-2 border rounded-lg bg-[#1a1a1a] text-gray-300 border-gray-800 focus:outline-none focus:ring-2 focus:ring-gray-700"
                 placeholder="메시지를 입력하세요..."
               />
               <button
                 type="submit"
-                className="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600"
+                className="bg-[#2a2a2a] text-gray-300 px-4 py-2 rounded-lg hover:bg-[#3a3a3a]"
               >
                 전송
               </button>
