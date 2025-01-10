@@ -3,30 +3,35 @@ import { loadFromStorage, saveToStorage } from '../utils/storage';
 import { handleGPTResponse, handleClaudeResponse, handleGeminiResponse } from '../services/aiService';
 
 export const useChat = () => {
-    const [messages, setMessages] = useState(() => loadFromStorage('chatMessages', []));
+    const [pages, setPages] = useState(() => loadFromStorage('chatPages', [
+        { id: Date.now(), name: 'Chat 1', messages: [] }
+    ]));
+    const [currentPage, setCurrentPage] = useState(() => pages[0]?.id);
     const [input, setInput] = useState('');
-    const [isLoading, setIsLoading] = useState({
-        gpt: false,
-        claude: false,
-        gemini: false
-    });
-    const [pages, setPages] = useState(() => loadFromStorage('chatPages', [{ id: 1, name: 'Chat 1', messages: [] }]));
-    const [currentPage, setCurrentPage] = useState(() => loadFromStorage('currentPage', 1));
-    const [activeLLMs, setActiveLLMs] = useState({
-        gpt: true,
-        claude: true,
-        gemini: true
-    });
+    const [isLoading, setIsLoading] = useState({ gpt: false, claude: false, gemini: false });
+    const [activeLLMs, setActiveLLMs] = useState({ gpt: true, claude: true, gemini: true });
+    const [deletedPages, setDeletedPages] = useState({});
+    const [allClearedPages, setAllClearedPages] = useState(null);
+    const [clearRestoreCountdown, setClearRestoreCountdown] = useState(0);
     const [selectedModels, setSelectedModels] = useState({
         gpt: 'gpt-3.5-turbo',
         claude: 'claude-3-opus-20240229',
         gemini: 'gemini-pro'
     });
     const [hoveredGroupId, setHoveredGroupId] = useState(null);
-    const [deletedPages, setDeletedPages] = useState({});
     const [restoreCountdowns, setRestoreCountdowns] = useState({});
-    const [allClearedPages, setAllClearedPages] = useState(null);
-    const [clearRestoreCountdown, setClearRestoreCountdown] = useState(0);
+
+    // 현재 페이지의 메시지만 반환
+    const messages = pages.find(p => p.id === currentPage)?.messages || [];
+
+    // 메시지 업데이트 함수
+    const updatePageMessages = useCallback((newMessage) => {
+        setPages(prevPages => prevPages.map(page => 
+            page.id === currentPage
+                ? { ...page, messages: [...page.messages, newMessage] }
+                : page
+        ));
+    }, [currentPage]);
 
     const handleSubmit = useCallback(async (e) => {
         e.preventDefault();
@@ -41,11 +46,11 @@ export const useChat = () => {
                 role: 'user',
                 content: input,
                 groupId,
-                model // 모델 정보 추가
+                model
             }));
 
         // 모든 사용자 메시지 추가
-        setMessages(prev => [...prev, ...userMessages]);
+        userMessages.forEach(msg => updatePageMessages(msg));
         setInput('');
 
         // GPT 응답 처리
@@ -53,21 +58,18 @@ export const useChat = () => {
             setIsLoading(prev => ({ ...prev, gpt: true }));
             try {
                 const gptResponse = await handleGPTResponse(input, groupId);
-                if (gptResponse) {  // 응답 확인
-                    setMessages(prev => [...prev, {
-                        ...gptResponse,
-                        model: 'gpt'
-                    }]);
-                }
+                updatePageMessages({
+                    ...gptResponse,
+                    model: 'gpt'
+                });
             } catch (error) {
                 console.error('GPT Error:', error);
-                // 에러 처리 추가
-                setMessages(prev => [...prev, {
+                updatePageMessages({
                     role: 'assistant',
                     content: 'Error: Failed to get response from GPT',
                     groupId,
                     model: 'gpt'
-                }]);
+                });
             } finally {
                 setIsLoading(prev => ({ ...prev, gpt: false }));
             }
@@ -78,21 +80,18 @@ export const useChat = () => {
             setIsLoading(prev => ({ ...prev, claude: true }));
             try {
                 const claudeResponse = await handleClaudeResponse(input, groupId);
-                if (claudeResponse) {  // 응답 확인
-                    setMessages(prev => [...prev, {
-                        ...claudeResponse,
-                        model: 'claude'
-                    }]);
-                }
+                updatePageMessages({
+                    ...claudeResponse,
+                    model: 'claude'
+                });
             } catch (error) {
                 console.error('Claude Error:', error);
-                // 에러 처리 추가
-                setMessages(prev => [...prev, {
+                updatePageMessages({
                     role: 'assistant',
                     content: 'Error: Failed to get response from Claude',
                     groupId,
                     model: 'claude'
-                }]);
+                });
             } finally {
                 setIsLoading(prev => ({ ...prev, claude: false }));
             }
@@ -103,26 +102,23 @@ export const useChat = () => {
             setIsLoading(prev => ({ ...prev, gemini: true }));
             try {
                 const geminiResponse = await handleGeminiResponse(input, groupId);
-                if (geminiResponse) {  // 응답 확인
-                    setMessages(prev => [...prev, {
-                        ...geminiResponse,
-                        model: 'gemini'
-                    }]);
-                }
+                updatePageMessages({
+                    ...geminiResponse,
+                    model: 'gemini'
+                });
             } catch (error) {
                 console.error('Gemini Error:', error);
-                // 에러 처리 추가
-                setMessages(prev => [...prev, {
+                updatePageMessages({
                     role: 'assistant',
                     content: 'Error: Failed to get response from Gemini',
                     groupId,
                     model: 'gemini'
-                }]);
+                });
             } finally {
                 setIsLoading(prev => ({ ...prev, gemini: false }));
             }
         }
-    }, [input, activeLLMs]);
+    }, [input, activeLLMs, updatePageMessages]);
 
     const addNewPage = useCallback(() => {
         const newPage = {
@@ -139,12 +135,27 @@ export const useChat = () => {
     }, []);
 
     const deletePage = useCallback((pageId) => {
-        setDeletedPages(prev => ({
-            ...prev,
-            [pageId]: pages.find(p => p.id === pageId)
-        }));
-        setPages(prev => prev.filter(p => p.id !== pageId));
-    }, [pages]);
+        const pageToDelete = pages.find(p => p.id === pageId);
+        if (pageToDelete) {
+            setDeletedPages(prev => ({
+                ...prev,
+                [pageId]: pageToDelete
+            }));
+            setRestoreCountdowns(prev => ({
+                ...prev,
+                [pageId]: 15  // 15초 카운트다운 시작
+            }));
+            setPages(prev => prev.filter(p => p.id !== pageId));
+            
+            // 삭제된 페이지가 현재 페이지였다면 다른 페이지로 이동
+            if (currentPage === pageId) {
+                const remainingPages = pages.filter(p => p.id !== pageId);
+                if (remainingPages.length > 0) {
+                    setCurrentPage(remainingPages[0].id);
+                }
+            }
+        }
+    }, [pages, currentPage]);
 
     const restorePage = useCallback((pageId) => {
         const pageToRestore = deletedPages[pageId];
@@ -154,6 +165,11 @@ export const useChat = () => {
                 const newDeletedPages = { ...prev };
                 delete newDeletedPages[pageId];
                 return newDeletedPages;
+            });
+            setRestoreCountdowns(prev => {
+                const newCountdowns = { ...prev };
+                delete newCountdowns[pageId];
+                return newCountdowns;
             });
         }
     }, [deletedPages]);
@@ -173,37 +189,64 @@ export const useChat = () => {
         }
     }, [allClearedPages]);
 
+    const handleModelChange = useCallback((llm, modelId) => {
+        setSelectedModels(prev => ({
+            ...prev,
+            [llm]: modelId
+        }));
+    }, []);
+
+    useEffect(() => {
+        saveToStorage('chatPages', pages);
+    }, [pages]);
+
+    useEffect(() => {
+        const timer = setInterval(() => {
+            setRestoreCountdowns(prev => {
+                const newCountdowns = { ...prev };
+                Object.keys(newCountdowns).forEach(pageId => {
+                    if (newCountdowns[pageId] > 0) {
+                        newCountdowns[pageId]--;
+                        if (newCountdowns[pageId] === 0) {
+                            // 카운트다운이 끝나면 삭제된 페이지 정보도 제거
+                            setDeletedPages(prev => {
+                                const newDeletedPages = { ...prev };
+                                delete newDeletedPages[pageId];
+                                return newDeletedPages;
+                            });
+                        }
+                    }
+                });
+                return newCountdowns;
+            });
+        }, 1000);
+
+        return () => clearInterval(timer);
+    }, []);
+
     return {
-        messages,
-        input,
-        isLoading,
         pages,
         currentPage,
-        activeLLMs,
-        selectedModels,
-        hoveredGroupId,
-        deletedPages,
-        restoreCountdowns,
-        allClearedPages,
-        clearRestoreCountdown,
-        setMessages,
+        messages,
+        input,
         setInput,
-        setIsLoading,
-        setPages,
-        setCurrentPage,
+        isLoading,
+        activeLLMs,
         setActiveLLMs,
-        setSelectedModels,
-        setHoveredGroupId,
-        setDeletedPages,
-        setRestoreCountdowns,
-        setAllClearedPages,
-        setClearRestoreCountdown,
         handleSubmit,
         addNewPage,
         changePage,
         deletePage,
         restorePage,
         clearAllChats,
-        restoreAllChats
+        restoreAllChats,
+        deletedPages,
+        allClearedPages,
+        clearRestoreCountdown,
+        selectedModels,
+        handleModelChange,
+        hoveredGroupId,
+        setHoveredGroupId,
+        restoreCountdowns
     };
 }; 
