@@ -1,12 +1,11 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { loadFromStorage, saveToStorage } from '../utils/storage';
 import { handleGPTResponse, handleClaudeResponse, handleGeminiResponse } from '../services/aiService';
+import { TOKEN_LIMITS, estimateTokenCount } from '../utils/tokenLimits';
 
 export const useChat = () => {
-    const [pages, setPages] = useState(() => loadFromStorage('chatPages', [
-        { id: Date.now(), name: 'Chat 1', messages: [] }
-    ]));
-    const [currentPage, setCurrentPage] = useState(() => pages[0]?.id);
+    const [pages, setPages] = useState([{ id: 1, name: 'New Chat', messages: [] }]);
+    const [currentPage, setCurrentPage] = useState(1);
     const [input, setInput] = useState('');
     const [isLoading, setIsLoading] = useState({ gpt: false, claude: false, gemini: false });
     const [activeLLMs, setActiveLLMs] = useState({ gpt: true, claude: true, gemini: true });
@@ -21,54 +20,111 @@ export const useChat = () => {
     const [hoveredGroupId, setHoveredGroupId] = useState(null);
     const [restoreCountdowns, setRestoreCountdowns] = useState({});
 
-    // 현재 페이지의 메시지만 반환
-    const messages = pages.find(p => p.id === currentPage)?.messages || [];
+    // 현재 페이지의 메시지들을 가져오는 함수
+    const currentMessages = useMemo(() => {
+        const currentPageData = pages.find(p => p.id === currentPage);
+        return currentPageData?.messages || [];
+    }, [pages, currentPage]);
 
     // 메시지 업데이트 함수
     const updatePageMessages = useCallback((newMessage) => {
-        setPages(prevPages => prevPages.map(page => 
-            page.id === currentPage
-                ? { ...page, messages: [...page.messages, newMessage] }
-                : page
-        ));
+        setPages(prevPages => 
+            prevPages.map(page => 
+                page.id === currentPage
+                    ? {
+                        ...page,
+                        messages: [...page.messages, {
+                            ...newMessage,
+                            timestamp: Date.now(),
+                            pageId: currentPage
+                        }]
+                    }
+                    : page
+            )
+        );
     }, [currentPage]);
+
+    // 대화 맥락을 포맷팅하는 함수 (토큰 제한 적용)
+    const formatConversationContext = useCallback((messages, model, llm) => {
+        const tokenLimit = TOKEN_LIMITS[llm]?.[model] || 4096; // 기본값 설정
+        const maxContextTokens = Math.floor(tokenLimit * 0.8); // 전체 토큰의 80%만 컨텍스트에 사용
+        
+        // 메시지 역순으로 정렬 (최신 메시지부터)
+        const reversedMessages = [...messages].reverse();
+        
+        let contextMessages = [];
+        let totalTokens = 0;
+        
+        // 토큰 제한을 고려하여 메시지 추가
+        for (const msg of reversedMessages) {
+            const messageTokens = estimateTokenCount(msg.content);
+            if (totalTokens + messageTokens > maxContextTokens) {
+                break;
+            }
+            contextMessages.unshift(msg); // 원래 순서로 다시 추가
+            totalTokens += messageTokens;
+        }
+        
+        // 대화 내용을 깔끔하게 포맷팅
+        const formattedContext = contextMessages.map(msg => {
+            const role = msg.role === 'user' ? 'Human' : 'Assistant';
+            return `${role}: ${msg.content}`;
+        }).join('\n\n');
+
+        return `Previous conversation context (within ${tokenLimit} token limit):
+${formattedContext}
+
+Current conversation:
+Human: `;
+    }, []);
 
     const handleSubmit = useCallback(async (e) => {
         e.preventDefault();
         if (!input.trim()) return;
 
         const groupId = Date.now();
-        
-        // 사용자 메시지를 각 활성화된 모델에 대해 복제
-        const userMessages = Object.entries(activeLLMs)
-            .filter(([_, isActive]) => isActive)
-            .map(([model]) => ({
-                role: 'user',
-                content: input,
-                groupId,
-                model
-            }));
 
-        // 모든 사용자 메시지 추가
-        userMessages.forEach(msg => updatePageMessages(msg));
+        // 사용자 메시지 추가
+        const userMessage = {
+            role: 'user',
+            content: input.trim(),
+            groupId,
+            timestamp: Date.now(),
+            pageId: currentPage
+        };
+        
+        // 즉시 사용자 메시지 추가
+        updatePageMessages(userMessage);
         setInput('');
 
         // GPT 응답 처리
         if (activeLLMs.gpt) {
             setIsLoading(prev => ({ ...prev, gpt: true }));
             try {
-                const gptResponse = await handleGPTResponse(input, groupId);
+                const conversationContext = formatConversationContext(
+                    currentMessages,
+                    selectedModels.gpt,
+                    'gpt'
+                );
+                const fullPrompt = `${conversationContext}${input}`;
+                const response = await handleGPTResponse(fullPrompt, groupId);
+                
+                // AI 응답 추가
                 updatePageMessages({
-                    ...gptResponse,
-                    model: 'gpt'
+                    role: 'assistant',
+                    content: response.content,
+                    model: 'gpt',
+                    groupId,
+                    pageId: currentPage
                 });
             } catch (error) {
                 console.error('GPT Error:', error);
                 updatePageMessages({
                     role: 'assistant',
                     content: 'Error: Failed to get response from GPT',
+                    model: 'gpt',
                     groupId,
-                    model: 'gpt'
+                    pageId: currentPage
                 });
             } finally {
                 setIsLoading(prev => ({ ...prev, gpt: false }));
@@ -79,18 +135,29 @@ export const useChat = () => {
         if (activeLLMs.claude) {
             setIsLoading(prev => ({ ...prev, claude: true }));
             try {
-                const claudeResponse = await handleClaudeResponse(input, groupId);
+                const conversationContext = formatConversationContext(
+                    currentMessages,
+                    selectedModels.claude,
+                    'claude'
+                );
+                const fullPrompt = `${conversationContext}${input}`;
+                const response = await handleClaudeResponse(fullPrompt, groupId);
+                
                 updatePageMessages({
-                    ...claudeResponse,
-                    model: 'claude'
+                    role: 'assistant',
+                    content: response.content,
+                    model: 'claude',
+                    groupId,
+                    pageId: currentPage
                 });
             } catch (error) {
                 console.error('Claude Error:', error);
                 updatePageMessages({
                     role: 'assistant',
                     content: 'Error: Failed to get response from Claude',
+                    model: 'claude',
                     groupId,
-                    model: 'claude'
+                    pageId: currentPage
                 });
             } finally {
                 setIsLoading(prev => ({ ...prev, claude: false }));
@@ -101,24 +168,43 @@ export const useChat = () => {
         if (activeLLMs.gemini) {
             setIsLoading(prev => ({ ...prev, gemini: true }));
             try {
-                const geminiResponse = await handleGeminiResponse(input, groupId);
+                const conversationContext = formatConversationContext(
+                    currentMessages,
+                    selectedModels.gemini,
+                    'gemini'
+                );
+                const fullPrompt = `${conversationContext}${input}`;
+                const response = await handleGeminiResponse(fullPrompt, groupId);
+                
                 updatePageMessages({
-                    ...geminiResponse,
-                    model: 'gemini'
+                    role: 'assistant',
+                    content: response.content,
+                    model: 'gemini',
+                    groupId,
+                    pageId: currentPage
                 });
             } catch (error) {
                 console.error('Gemini Error:', error);
                 updatePageMessages({
                     role: 'assistant',
                     content: 'Error: Failed to get response from Gemini',
+                    model: 'gemini',
                     groupId,
-                    model: 'gemini'
+                    pageId: currentPage
                 });
             } finally {
                 setIsLoading(prev => ({ ...prev, gemini: false }));
             }
         }
-    }, [input, activeLLMs, updatePageMessages]);
+    }, [
+        input,
+        currentPage,
+        activeLLMs,
+        selectedModels,
+        currentMessages,
+        updatePageMessages,
+        formatConversationContext
+    ]);
 
     const addNewPage = useCallback(() => {
         const newPage = {
@@ -235,7 +321,7 @@ export const useChat = () => {
     return {
         pages,
         currentPage,
-        messages,
+        messages: currentMessages,
         input,
         setInput,
         isLoading,

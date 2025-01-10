@@ -26,6 +26,35 @@ export const ChatArea = ({
         }
     };
 
+    // 사용자 메시지와 AI 응답을 함께 표시하는 메시지 렌더링 함수
+    const renderMessages = (modelType) => {
+        return messages.map((message, index) => {
+            // 사용자 메시지는 모든 활성화된 모델 칸에 표시
+            const shouldShowMessage = message.role === 'user' || message.model === modelType;
+            
+            if (shouldShowMessage) {
+                return (
+                    <div key={`${modelType}-${message.timestamp || index}`}>
+                        {message.role === 'user' ? (
+                            <UserMessage
+                                message={message}
+                                hoveredGroupId={hoveredGroupId}
+                                setHoveredGroupId={setHoveredGroupId}
+                            />
+                        ) : (
+                            <ResponseMessage
+                                message={message}
+                                hoveredGroupId={hoveredGroupId}
+                                setHoveredGroupId={setHoveredGroupId}
+                            />
+                        )}
+                    </div>
+                );
+            }
+            return null;
+        });
+    };
+
     return (
         <div className="flex-1 flex flex-col bg-[#0a0a0a]">
             {/* 모델 선택기 헤더 - flex 레이아웃으로 변경 */}
@@ -70,32 +99,14 @@ export const ChatArea = ({
                 </div>
             </div>
 
-            {/* 메시지 영역 - 동적 레이아웃 */}
+            {/* 메시지 영역 */}
             <div className="flex-1 flex">
                 {/* GPT 영역 */}
                 {activeLLMs.gpt && (
                     <div className={`${getColumnClass()} border-r border-gray-800 overflow-hidden`}>
                         <div className="h-full px-8 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-800 scrollbar-track-transparent">
                             <div className="space-y-4 py-4">
-                                {messages.map((message, index) => (
-                                    message.model === 'gpt' && (
-                                        <div key={`gpt-${index}`}>
-                                            {message.role === 'user' ? (
-                                                <UserMessage
-                                                    message={message}
-                                                    hoveredGroupId={hoveredGroupId}
-                                                    setHoveredGroupId={setHoveredGroupId}
-                                                />
-                                            ) : (
-                                                <ResponseMessage
-                                                    message={message}
-                                                    hoveredGroupId={hoveredGroupId}
-                                                    setHoveredGroupId={setHoveredGroupId}
-                                                />
-                                            )}
-                                        </div>
-                                    )
-                                ))}
+                                {renderMessages('gpt')}
                                 {isLoading.gpt && <LoadingIndicator />}
                             </div>
                         </div>
@@ -107,25 +118,7 @@ export const ChatArea = ({
                     <div className={`${getColumnClass()} border-r border-gray-800 overflow-hidden`}>
                         <div className="h-full px-8 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-800 scrollbar-track-transparent">
                             <div className="space-y-4 py-4">
-                                {messages.map((message, index) => (
-                                    message.model === 'claude' && (
-                                        <div key={`claude-${index}`}>
-                                            {message.role === 'user' ? (
-                                                <UserMessage
-                                                    message={message}
-                                                    hoveredGroupId={hoveredGroupId}
-                                                    setHoveredGroupId={setHoveredGroupId}
-                                                />
-                                            ) : (
-                                                <ResponseMessage
-                                                    message={message}
-                                                    hoveredGroupId={hoveredGroupId}
-                                                    setHoveredGroupId={setHoveredGroupId}
-                                                />
-                                            )}
-                                        </div>
-                                    )
-                                ))}
+                                {renderMessages('claude')}
                                 {isLoading.claude && <LoadingIndicator />}
                             </div>
                         </div>
@@ -137,25 +130,7 @@ export const ChatArea = ({
                     <div className={`${getColumnClass()} overflow-hidden`}>
                         <div className="h-full px-8 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-800 scrollbar-track-transparent">
                             <div className="space-y-4 py-4">
-                                {messages.map((message, index) => (
-                                    message.model === 'gemini' && (
-                                        <div key={`gemini-${index}`}>
-                                            {message.role === 'user' ? (
-                                                <UserMessage
-                                                    message={message}
-                                                    hoveredGroupId={hoveredGroupId}
-                                                    setHoveredGroupId={setHoveredGroupId}
-                                                />
-                                            ) : (
-                                                <ResponseMessage
-                                                    message={message}
-                                                    hoveredGroupId={hoveredGroupId}
-                                                    setHoveredGroupId={setHoveredGroupId}
-                                                />
-                                            )}
-                                        </div>
-                                    )
-                                ))}
+                                {renderMessages('gemini')}
                                 {isLoading.gemini && <LoadingIndicator />}
                             </div>
                         </div>
